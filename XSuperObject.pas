@@ -355,6 +355,7 @@ type
   ['{B7E271F3-205B-4172-8532-BE03F2A6EDE7}']
     procedure First;
     procedure Next;
+    procedure Previous;
     function GetEoF: Boolean;
     function GetCount: Integer;
     function GetCurrentKey: String;
@@ -403,6 +404,7 @@ type
   public
     procedure First;
     procedure Next;
+    procedure Previous;
 
     procedure Add(const Key: String; const Data: IJSONAncestor);
     procedure SetData(V: String; Data: Variant); overload; inline;
@@ -906,10 +908,23 @@ begin
 end;
 
 function TBaseJSON<T, Typ>.GetBoolean(V: Typ): Boolean;
+var
+  LJsonAncestor: TJSONAncestor;
+  LVar: Variant;
 begin
   Result := False;
   if Member(V) then
-    Result := GetValue<TJSONAncestor>(V).ValueEx<Boolean>;
+  begin
+    LJsonAncestor := GetValue<TJSONAncestor>(V);
+
+    if LJsonAncestor.ClassType = TJSONInteger then
+    begin
+      LVar := LJsonAncestor.AsVariant;
+      Result := LVar <> 0;
+    end
+    else
+      Result := GetValue<TJSONAncestor>(V).ValueEx<Boolean>;
+  end;
 end;
 
 function TBaseJSON<T, Typ>.GetData(Key: Typ): IJSONAncestor;
@@ -947,14 +962,16 @@ function TBaseJSON<T, Typ>.GetDate(V: Typ): TDate;
 begin
   Result := 0;
   if Member(V) then
-     Result := GetValue<TJSONDate>(V).Value;
+    if GetNull(V) = jAssigned then
+      Result := GetValue<TJSONDate>(V).Value;
 end;
 
 function TBaseJSON<T, Typ>.GetDateTime(V: Typ): TDateTime;
 begin
   Result := 0;
   if Member(V) then
-     Result := GetValue<TJSONDateTime>(V).Value;
+    if GetNull(V) = jAssigned then
+      Result := GetValue<TJSONDateTime>(V).Value;
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
@@ -1315,6 +1332,11 @@ begin
   end;
 end;
 
+procedure TSuperObject.Previous;
+begin
+  Dec(FOffset);
+end;
+
 procedure TSuperObject.Remove(Key: String);
 begin
   FJSONObj.Remove(Key);
@@ -1603,7 +1625,8 @@ end;
 
 procedure TSuperArray.Sort(Comparison: TJSONComparison<IMember>);
 begin
-  if not Assigned(Comparison) then Exit;
+  if not Assigned(Comparison) or not (Assigned(FJSONObj)) then Exit;
+  FJSONObj.Count;
   FJSONObj.Sort(function(Left, Right: IJSONAncestor): Integer
   begin
      Result := Comparison(TCast.Create(Left), TCast.Create(Right));
@@ -3457,3 +3480,4 @@ initialization
   GenericsUnit := TEnumerable<Boolean>.UnitName;
 
 end.
+
