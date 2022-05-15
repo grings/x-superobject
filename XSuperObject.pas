@@ -1626,11 +1626,22 @@ end;
 procedure TSuperArray.Sort(Comparison: TJSONComparison<IMember>);
 begin
   if not Assigned(Comparison) or not (Assigned(FJSONObj)) then Exit;
-  FJSONObj.Count;
-  FJSONObj.Sort(function(Left, Right: IJSONAncestor): Integer
+  if Supports(FJSONObj, IJSONArray) then
   begin
-     Result := Comparison(TCast.Create(Left), TCast.Create(Right));
-  end);
+    (FJSONObj as IJSONArray).Count;
+    (FJSONObj as IJSONArray).Sort(function(Left, Right: IJSONAncestor): Integer
+    begin
+       Result := Comparison(TCast.Create(Left), TCast.Create(Right));
+    end);
+  end
+  else
+  begin
+    FJSONObj.Count;
+    FJSONObj.Sort(function(Left, Right: IJSONAncestor): Integer
+    begin
+       Result := Comparison(TCast.Create(Left), TCast.Create(Right));
+    end);
+  end;
 end;
 
 function TSuperArray.T: TSuperArray;
