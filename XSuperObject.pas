@@ -1593,12 +1593,18 @@ begin
     case LCast.DataType of
       dtObject:
         begin
-          if (LCast.AsObject.Contains(Key)) and
-            (LCast.AsObject.V[Key] = AValue)
-          then
+          if (LCast.AsObject.Contains(Key)) then
           begin
-            Result := i;
-            Break;
+            if
+            (LCast.AsObject.V[Key] = AValue) or
+            ((VarIsStr(LCast.AsObject.V[Key])) and (VarIsStr(AValue)) and
+            (VarToStr(LCast.AsObject.V[Key]).ToUpper = VarToStr(AValue).ToUpper)
+            )
+            then
+            begin
+              Result := i;
+              Break;
+            end;
           end;
         end;
     end;
@@ -3520,4 +3526,6 @@ initialization
   GenericsUnit := TEnumerable<Boolean>.UnitName;
 
 end.
+
+
 
