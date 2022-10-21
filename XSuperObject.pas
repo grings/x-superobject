@@ -919,7 +919,7 @@ begin
   begin
     LJsonAncestor := GetValue<TJSONAncestor>(V);
 
-    if LJsonAncestor.ClassType = TJSONInteger then
+    if (Assigned(LJsonAncestor)) and (LJsonAncestor.ClassType = TJSONInteger) then
     begin
       LVar := LJsonAncestor.AsVariant;
       Result := LVar <> 0;
