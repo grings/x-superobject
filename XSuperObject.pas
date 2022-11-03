@@ -1,4 +1,4 @@
-﻿ (*
+ (*
   *                       XSuperObject - Simple JSON Framework
   *
   * The MIT License (MIT)
@@ -163,7 +163,8 @@ type
     property Date[V: Typ]: TDate read GetDate write SetDate;
     property Time[V: Typ]: TTime read GetTime write SetTime;
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
-    function Contains(Key: Typ): Boolean;
+    function Contains(Key: Typ): Boolean; overload;
+    function Contains(AKey: Typ; AType: TVarType): Boolean; overload;
     function GetType(Key: Typ): TVarType;
     procedure Sort(Comparison: TJSONComparison<IMember>);
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload;
@@ -236,7 +237,8 @@ type
     property Date[V: Typ]: TDate read GetDate write SetDate;
     property Time[V: Typ]: TTime read GetTime write SetTime;
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
-    function Contains(Key: Typ): Boolean;
+    function Contains(Key: Typ): Boolean; overload;
+    function Contains(AKey: Typ; AType: TVarType): Boolean; overload;
     function GetType(Key: Typ): TVarType;
     procedure Sort(Comparison: TJSONComparison<IMember>); virtual; abstract;
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; virtual; abstract;
@@ -370,6 +372,7 @@ type
     procedure SetData(V: String; Data: Variant); overload;
     procedure SetData(V: String; Data: Variant; AFormatSettings: TFormatSettings); overload;
     procedure Remove(Key: String);
+    procedure Clear;
     function  Check(const Expr: String): Boolean;
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
@@ -416,6 +419,7 @@ type
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure SaveTo(AFile: String; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; override;
     procedure Remove(Key: String);
+    procedure Clear;
     function  Check(const Expr: String): Boolean;
 
     property Expression[const Code: String]: ISuperExpression read GetExpr; default;
@@ -825,6 +829,13 @@ begin
   Result := GetData(Key) <> Nil;
 end;
 
+function TBaseJSON<T, Typ>.Contains(AKey: Typ; AType: TVarType): Boolean;
+begin
+  Result := Contains(AKey);
+  if Result then
+    Result := GetType(AKey) = AType;
+end;
+
 function TBaseJSON<T, Typ>.ContainsEx(Key: Typ; out Value: IJSONAncestor): Boolean;
 begin
   Value := GetData(Key);
@@ -1225,6 +1236,13 @@ begin
      Result := TCast.Create(FJSONObj);
 end;
 
+procedure TSuperObject.Clear;
+begin
+  First;
+  while not EoF do
+    Remove(CurrentKey);
+end;
+
 function TSuperObject.Clone: ISuperObject;
 begin
   Result := SO(AsJSON);
@@ -1593,18 +1611,12 @@ begin
     case LCast.DataType of
       dtObject:
         begin
-          if (LCast.AsObject.Contains(Key)) then
+          if (LCast.AsObject.Contains(Key)) and
+            (LCast.AsObject.V[Key] = AValue)
+          then
           begin
-            if
-            (LCast.AsObject.V[Key] = AValue) or
-            ((VarIsStr(LCast.AsObject.V[Key])) and (VarIsStr(AValue)) and
-            (VarToStr(LCast.AsObject.V[Key]).ToUpper = VarToStr(AValue).ToUpper)
-            )
-            then
-            begin
-              Result := i;
-              Break;
-            end;
+            Result := i;
+            Break;
           end;
         end;
     end;
@@ -1661,22 +1673,11 @@ end;
 procedure TSuperArray.Sort(Comparison: TJSONComparison<IMember>);
 begin
   if not Assigned(Comparison) or not (Assigned(FJSONObj)) then Exit;
-  if Supports(FJSONObj, IJSONArray) then
+  FJSONObj.Count;
+  FJSONObj.Sort(function(Left, Right: IJSONAncestor): Integer
   begin
-    (FJSONObj as IJSONArray).Count;
-    (FJSONObj as IJSONArray).Sort(function(Left, Right: IJSONAncestor): Integer
-    begin
-       Result := Comparison(TCast.Create(Left), TCast.Create(Right));
-    end);
-  end
-  else
-  begin
-    FJSONObj.Count;
-    FJSONObj.Sort(function(Left, Right: IJSONAncestor): Integer
-    begin
-       Result := Comparison(TCast.Create(Left), TCast.Create(Right));
-    end);
-  end;
+     Result := Comparison(TCast.Create(Left), TCast.Create(Right));
+  end);
 end;
 
 function TSuperArray.T: TSuperArray;
