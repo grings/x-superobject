@@ -3527,6 +3527,3 @@ initialization
   GenericsUnit := TEnumerable<Boolean>.UnitName;
 
 end.
-
-
-
