@@ -61,6 +61,20 @@ type
   TJSONComparison<T> = reference to function(Left, Right: T): Integer;
   // ## Exception
 
+  TSuperJsonConfig = class
+  private
+    { private declarations }
+  protected
+    { protected declarations }
+  public
+    type
+    TKeyNameCharCase = (knccNone, knccLower, knccUpper);
+
+    class constructor OnCreate;
+    class var KeyNameCharCase: TKeyNameCharCase;
+    { public declarations }
+  end;
+
   TJSONSyntaxError = class(Exception)
   public
     constructor Create(const Msg: String; Pos: PPosition);
@@ -1431,10 +1445,10 @@ begin
   repeat
     if LGen.CheckName(Name) then
     begin
-       LGen.KillLex;
-       if not LGen.CheckKill(ltColon) then
-          raise TJSONSyntaxError.CreateFmt(Err_Expected, [':'], LGen.CurrPos);
-       TJSONObject(Val).AddPair(TJSONPair.Create(Name, ReadValue));
+      LGen.KillLex;
+      if not LGen.CheckKill(ltColon) then
+        raise TJSONSyntaxError.CreateFmt(Err_Expected, [':'], LGen.CurrPos);
+      TJSONObject(Val).AddPair(TJSONPair.Create(Name, ReadValue));
     end
   until not LGen.CheckKill(ltVirgule);
 
@@ -1672,8 +1686,8 @@ end;
 
 constructor TJSONPair.Create(const aName: String; aValue: IJSONAncestor);
 begin
-  FName := aName;
-  FValue := aValue;
+  Name := aName;
+  SetValue(aValue);
 end;
 
 destructor TJSONPair.Destroy;
@@ -1695,7 +1709,14 @@ end;
 
 procedure TJSONPair.SetName(const Value: String);
 begin
-  FName := Value;
+  case TSuperJSONConfig.KeyNameCharCase of
+    TSuperJsonConfig.TKeyNameCharCase.knccLower:
+      FName := Value.ToLower;
+    TSuperJsonConfig.TKeyNameCharCase.knccUpper:
+      FName := Value.ToUpper;
+  else
+    FName := Value;
+  end;
 end;
 
 procedure TJSONPair.SetValue(const Value: IJSONAncestor);
@@ -2340,6 +2361,13 @@ end;
 procedure TJSONRaw.AsJSONString(Str: TJSONWriter);
 begin
   Str.AppendVal( Value );
+end;
+
+{ TSuperJsonConfig }
+
+class constructor TSuperJsonConfig.OnCreate;
+begin
+  KeyNameCharCase := knccNone;
 end;
 
 initialization
