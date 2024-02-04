@@ -72,6 +72,11 @@ type
 
     class constructor OnCreate;
     class var KeyNameCharCase: TKeyNameCharCase;
+
+    // the Format that you expect to format the data
+    class var FormatDateTimeStr: string;
+    class var FormatDateStr: string;
+    class var FormatTimeStr: string;
     { public declarations }
   end;
 
@@ -1468,9 +1473,9 @@ begin
   else
      if TJSONDateManager.Check(LGen.Current.Str, dT, DVal ) then
         case DVal of
-           dtDateTime: Val := TJSONDateTime.Create(dT);
-           dtDate    : Val := TJSONDate.Create(TDate(dT));
-           dtTime    : Val := TJSONTime.Create(TTime(dT));
+           dtDateTime: Val := TJSONDateTime.Create(dT, TSuperJsonConfig.FormatDateTimeStr);
+           dtDate    : Val := TJSONDate.Create(TDate(dT), TSuperJsonConfig.FormatDateStr);
+           dtTime    : Val := TJSONTime.Create(TTime(dT), TSuperJsonConfig.FormatTimeStr);
            else
              goto JMP;
         end
@@ -2368,6 +2373,9 @@ end;
 class constructor TSuperJsonConfig.OnCreate;
 begin
   KeyNameCharCase := knccNone;
+  FormatDateTimeStr := EmptyStr;
+  FormatDateStr := EmptyStr;
+  FormatTimeStr := EmptyStr;
 end;
 
 initialization
