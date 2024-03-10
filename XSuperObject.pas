@@ -997,12 +997,12 @@ end;
 
 function TBaseJSON<T, Typ>.GetDateTime(V: Typ): TDateTime;
 var
-  Temp: IJSONAncestor;
+  Temp: IJSONAncestor;   
 begin
   Result := 0;
   if Member(V) then
     if GetNull(V) = jAssigned then
-    begin
+	begin
       Temp := GetData(V);
       if (Temp is TJSONDate) then
         Result := GetDate(V)
@@ -1010,7 +1010,7 @@ begin
         Result := GetTime(V)
       else
         Result := GetValue<TJSONDateTime>(V).Value
-    end;
+    end;	
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
