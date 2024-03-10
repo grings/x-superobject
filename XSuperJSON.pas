@@ -57,21 +57,26 @@ type
     Line: Integer;
   end;
 
-  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
+  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtBInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
   TJSONComparison<T> = reference to function(Left, Right: T): Integer;
   // ## Exception
 
   TSuperJsonConfig = class
   private
+    class var
+    FDoBreakpoint: Boolean;
     { private declarations }
   protected
     { protected declarations }
   public
     type
     TKeyNameCharCase = (knccNone, knccLower, knccUpper);
-
+    { public declarations }
+  public
     class constructor OnCreate;
     class var KeyNameCharCase: TKeyNameCharCase;
+
+    class property DoBreakpoint: Boolean read FDoBreakpoint write FDoBreakpoint;
     { public declarations }
   end;
 
@@ -190,6 +195,13 @@ type
 
   IJSONInteger = interface(IJSONValue<Int64>)['{E9D84348-9634-40F5-8A1F-FF006F45FC6D}']end;
   TJSONInteger = class(TJSONValue<Int64>, IJSONInteger)
+  public
+    procedure AsJSONString(Str: TJSONWriter); override;
+    property Value;
+  end;
+
+  IJSONBInteger = interface(IJSONValue<string>)['{6D94F627-7700-4811-9C9F-CE9616136E2D}']end;
+  TJSONBInteger = class(TJSONValue<string>, IJSONBInteger)
   public
     procedure AsJSONString(Str: TJSONWriter); override;
     property Value;
@@ -368,6 +380,7 @@ type
     function  ReadValue: IJSONAncestor;
     procedure ReadString(var Val: IJSONAncestor);
     procedure ReadInteger(var Val: IJSONAncestor);
+    procedure ReadBInteger(var Val: IJSONAncestor);
     procedure ReadFloat(var Val: IJSONAncestor);
     procedure ReadObject(var Val: IJSONAncestor);
     procedure ReadTrue(var Val: IJSONAncestor);
@@ -399,7 +412,7 @@ type
   // --------
 
   TLexemType = ( ltNil,
-                 ltSValue, ltIValue, ltDValue, ltNull, ltCLeft, ltCRight,
+                 ltSValue, ltIValue, ltBIValue, ltDValue, ltNull, ltCLeft, ltCRight,
                  ltBLeft, ltBRight, ltBSlash, ltColon, ltDot, ltVirgule,
                  ltName,
                  ltTrue,
@@ -416,6 +429,7 @@ type
     destructor Destroy; override;
     function AsString: String; inline;
     function AsInt64: Int64;
+    function AsBInt: string;
     function AsDouble: Double;
     function AsType: TLexemType;
     function AsHInt: Int64;
@@ -428,12 +442,13 @@ type
   TLexeme = record
     Pos: TPosition;
     Int: Int64;
+    BInt: string;
     Str: String;
     Dbl: Double;
     LType: TLexemType;
   end;
 
-  TParseProc = (ppNil, ppInteger, ppDouble, ppString, ppName, ppEscape, ppEscapeUChar);
+  TParseProc = (ppNil, ppInteger, ppBInteger, ppDouble, ppString, ppName, ppEscape, ppEscapeUChar);
 
   TTriggerProcs = set of (ttBuffer, ttEnd, ttBack);
 
@@ -509,6 +524,7 @@ type
      rString,
      rString2,
      rInt,
+     rBInt,
      rDouble,
      rExp, rExpE,
      rExpPM,
@@ -595,7 +611,7 @@ uses
 const
   FloatFormat : TFormatSettings = ( DecimalSeparator : '.' );
   STokenTypes : array [TLexemType] of string = ('Nil',
-                'String', 'Integer', 'Float', 'Null', '[', ']',
+                'String', 'Integer', 'BInteger', 'Float', 'Null', '[', ']',
                 '(', ')', '\', ':', '.', ',',
                 '',
                 'TRUE',
@@ -787,7 +803,14 @@ end;
 
 function TLexBuff.AsInt64: Int64;
 begin
-  Result := StrToInt64(AsString);
+  var
+  LStr := AsString;
+  Result := StrToInt64(LStr);
+end;
+
+function TLexBuff.AsBInt: string;
+begin
+  SetString(Result, Buff, Length);
 end;
 
 function TLexBuff.AsString: String;
@@ -865,8 +888,6 @@ end;
 
 { TTrigger }
 
-{ TTrigger }
-
 constructor TTrigger.Create(NextRoute: TRoute; TriggerProcs: TTriggerProcs;
   ParseProcs: TParseProc);
 begin
@@ -904,7 +925,6 @@ begin
   FName := Name;
   FTriggerList := TObjectList<TTrigger>.Create;
 end;
-
 
 destructor TRoute.Destroy;
 begin
@@ -986,12 +1006,12 @@ end;
 constructor TJSONGrammar.Create;
 begin
   inherited;
-
   rFirst := CreateRoute('First');
   rName := CreateRoute('Name');
   rString := CreateRoute('String');
   rString2 := CreateRoute('String2');
   rInt := CreateRoute('Int');
+  rBInt := CreateRoute('BInt');
   rDouble := CreateRoute('Double');
 
   rExp := CreateRoute('Exp');
@@ -1038,6 +1058,12 @@ begin
   rInt.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppInteger));
   rInt.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
 
+  rBInt.Add(optNumeric, TUseRouteTrigger.Create(rBInt, [], ppNil));
+  rBInt.Add(['.'], TUseRouteTrigger.Create(rDouble, [], ppNil));
+  rBInt.Add(['e', 'E'], TUseRouteTrigger.Create(rExp, [], ppNil));
+  rBInt.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppInteger));
+  rBInt.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
+
   rDouble.Add(optNumeric, TUseRouteTrigger.Create(rDouble, [], ppNil));
   rDouble.Add(['e', 'E'], TUseRouteTrigger.Create(rExp, [], ppNil));
   rDouble.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppDouble));
@@ -1053,7 +1079,6 @@ begin
   rExpE.Add(optNumeric, TUseRouteTrigger.Create(rExpE, [], ppNil));
   rExpE.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppDouble));
   rExpE.NoRoute(TErrorTrigger.Create(Err_UnexpectedTokenILLEGAL));
-
 end;
 
 destructor TJSONGrammar.Destroy;
@@ -1063,6 +1088,7 @@ begin
   rString.Free;
   rString2.Free;
   rInt.Free;
+  rBInt.Free;
   rDouble.Free;
   rExp.Free;
   rExpE.Free;
@@ -1314,8 +1340,20 @@ begin
      begin
         case Trigger.ParseProcs of
             ppInteger: begin
-               FLexem.Int := FBuffer.AsInt64;
-               FLexem.LType := ltIValue;
+               if FBuffer.AsString.Length >= 20 then
+               begin
+                 FLexem.BInt := FBuffer.AsString;
+                 FLexem.LType := ltBIValue;
+               end
+               else
+               begin
+                 FLexem.Int := FBuffer.AsInt64;
+                 FLexem.LType := ltIValue;
+               end;
+            end;
+            ppBInteger: begin
+               FLexem.BInt := FBuffer.AsBInt;
+               FLexem.LType := ltBIValue;
             end;
             ppDouble:begin
                FLexem.Dbl := FBuffer.AsDouble;
@@ -1430,6 +1468,12 @@ begin
   LGen.KillLex;
 end;
 
+procedure TJSONBuilder.ReadBInteger(var Val: IJSONAncestor);
+begin
+  Val := TJSONBInteger.Create(LGen.Current.BInt);
+  LGen.KillLex;
+end;
+
 procedure TJSONBuilder.ReadNull(var Val: IJSONAncestor);
 begin
   Val := TJSONNull.Create(True);
@@ -1487,10 +1531,11 @@ end;
 
 function TJSONBuilder.ReadValue: IJSONAncestor;
 begin
-  case LGen.Check([ ltSValue, ltIValue, ltDValue, ltBLeft, ltCLeft,
+  case LGen.Check([ ltSValue, ltIValue, ltBIValue, ltDValue, ltBLeft, ltCLeft,
                     ltTrue, ltFalse, ltNull ]) of
     ltSValue: ReadString(Result);
     ltIValue: ReadInteger(Result);
+    ltBIValue: ReadBInteger(Result);
     ltDValue: ReadFloat(Result);
     ltBLeft : ReadObject(Result);
     ltTrue  : ReadTrue(Result);
@@ -1520,6 +1565,21 @@ begin
      Str.AppendVal( cNull )
   else
      Str.AppendVal( Value );
+end;
+
+
+{ TJSONBInteger }
+
+procedure TJSONBInteger.AsJSONString(Str: TJSONWriter);
+begin
+  if FNull then
+     Str.AppendVal( cNull )
+  else
+  begin
+    var
+    LValue := Value;
+     Str.AppendVal( LValue );
+  end;
 end;
 
 
@@ -2368,6 +2428,7 @@ end;
 class constructor TSuperJsonConfig.OnCreate;
 begin
   KeyNameCharCase := knccNone;
+  DoBreakpoint := False;
 end;
 
 initialization
