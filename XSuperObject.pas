@@ -165,6 +165,7 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean; overload;
     function Contains(AKey: Typ; AType: TVarType): Boolean; overload;
+    function Contains(AKey: Typ; AType: array of TVarType): Boolean; overload;
     function GetType(Key: Typ): TVarType;
     procedure Sort(Comparison: TJSONComparison<IMember>);
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload;
@@ -239,6 +240,7 @@ type
     property Ancestor[V: Typ]: IJSONAncestor read GetAncestor;
     function Contains(Key: Typ): Boolean; overload;
     function Contains(AKey: Typ; AType: TVarType): Boolean; overload;
+    function Contains(AKey: Typ; AType: array of TVarType): Boolean; overload;
     function GetType(Key: Typ): TVarType;
     procedure Sort(Comparison: TJSONComparison<IMember>); virtual; abstract;
     procedure SaveTo(Stream: TStream; const Ident: Boolean = false; const UniversalTime : Boolean = false); overload; virtual; abstract;
@@ -836,6 +838,18 @@ begin
     Result := GetType(AKey) = AType;
 end;
 
+function TBaseJSON<T, Typ>.Contains(AKey: Typ;
+  AType: array of TVarType): Boolean;
+begin
+  Result := False;
+  for var i := Low(AType) to High(AType) do
+  begin
+    Result := Contains(AKey, AType[i]);
+    if Result then
+      Break;
+  end;
+end;
+
 function TBaseJSON<T, Typ>.ContainsEx(Key: Typ; out Value: IJSONAncestor): Boolean;
 begin
   Value := GetData(Key);
@@ -879,11 +893,11 @@ begin
   else if TJSONNull.InheritsFrom(TT) then
     Result := TJSONNull.Create(Boolean(Value)) as TT
   else if TJSONDateTime.InheritsFrom(TT) then
-    Result := TJSONDateTime.Create(TDateTime(Value)) as TT
+    Result := TJSONDateTime.Create(TDateTime(Value), TSuperJsonConfig.FormatDateTimeStr) as TT
   else if TJSONDate.InheritsFrom(TT) then
-    Result := TJSONDate.Create(TDate(Value)) as TT
+    Result := TJSONDate.Create(TDate(Value), TSuperJsonConfig.FormatDateStr) as TT
   else if TJSONTime.InheritsFrom(TT) then
-    Result := TJSONTime.Create(TTime(Value)) as TT
+    Result := TJSONTime.Create(TTime(Value), TSuperJsonConfig.FormatTimeStr) as TT
   else if TJSONRaw.InheritsFrom(TT) then
     Result := TJSONRaw.Create(String(Value)) as TT
   else if TJSONArray.InheritsFrom(TT) then
