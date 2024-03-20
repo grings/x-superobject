@@ -127,9 +127,11 @@ type
   ['{EBD49266-BEF2-4B79-9BAF-329F725E0568}']
     function GetBoolean(V: Typ): Boolean;
     function GetInteger(V: Typ): Int64;
+    function GetBInteger(V: Typ): string;
     function GetString(V: Typ): String;
     procedure SetBoolean(V: Typ; const Value: Boolean);
     procedure SetInteger(V: Typ; const Value: Int64);
+    procedure SetBInteger(V: Typ; const Value: string);
     procedure SetString(V: Typ; const Value: String);
     function GetObject(V: Typ): ISuperObject;
     procedure SetObject(V: Typ; const Value: ISuperObject);
@@ -154,6 +156,7 @@ type
     property Null[V: Typ]: TMemberStatus read GetNull write SetNull;
     property S[V: Typ]: String read GetString write SetString;
     property I[V: Typ]: Int64 read GetInteger write SetInteger;
+    property BI[V: Typ]: string read GetBInteger write SetBInteger;
     property B[V: Typ]: Boolean read GetBoolean write SetBoolean;
     property F[V: Typ]: Double read GetDouble write SetDouble;
     property O[V: Typ]: ISuperObject read GetObject write SetObject;
@@ -203,6 +206,7 @@ type
     function GetArray(V: Typ): ISuperArray; virtual;
     function GetBoolean(V: Typ): Boolean; virtual;
     function GetInteger(V: Typ): Int64; virtual;
+    function GetBInteger(V: Typ): string; virtual;
     function GetString(V: Typ): String; virtual;
     function GetDouble(V: Typ): Double; virtual;
     function GetAncestor(V: Typ): IJSONAncestor; inline;
@@ -217,6 +221,7 @@ type
     procedure SetArray(V: Typ; const Value: ISuperArray); virtual;
     procedure SetBoolean(V: Typ; const Value: Boolean); virtual;
     procedure SetInteger(V: Typ; const Value: Int64); virtual;
+    procedure SetBInteger(V: Typ; const Value: string); virtual;
     procedure SetString(V: Typ; const Value: String); virtual;
     procedure SetDouble(V: Typ; const Value: Double); virtual;
     procedure SetNull(V: Typ; const Value: TMemberStatus); virtual;
@@ -229,6 +234,7 @@ type
     property Null[V: Typ]: TMemberStatus read GetNull write SetNull;
     property S[V: Typ]: String read GetString write SetString;
     property I[V: Typ]: Int64 read GetInteger write SetInteger;
+    property BI[V: Typ]: string read GetBInteger write SetBInteger;
     property B[V: Typ]: Boolean read GetBoolean write SetBoolean;
     property F[V: Typ]: Double read GetDouble write SetDouble;
     property O[V: Typ]: ISuperObject read GetObject write SetObject;
@@ -258,6 +264,7 @@ type
     function GetDataType: TDataType;
     function GetFloat: Double;
     function GetInteger: Int64;
+    function GetBInteger: string;
     function GetObject: ISuperObject;
     function GetString: String;
     function GetName: String;
@@ -271,6 +278,7 @@ type
     procedure SetBoolean(const Value: Boolean);
     procedure SetFloat(const Value: Double);
     procedure SetInteger(const Value: Int64);
+    procedure SetBInteger(const Value: string);
     procedure SetString(const Value: String);
     procedure SetVariant(const Value: Variant);
 
@@ -278,6 +286,7 @@ type
     property AsArray: ISuperArray read GetArray;
     property AsString: String read GetString write SetString;
     property AsInteger: Int64 read GetInteger write SetInteger;
+    property AsBInteger: string read GetBInteger write SetBInteger;
     property AsFloat: Double read GetFloat write SetFloat;
     property AsBoolean: Boolean read GetBoolean write SetBoolean;
     property AsVariant: Variant read GetVariant write SetVariant;
@@ -298,11 +307,13 @@ type
     function GetDataType: TDataType;
     function GetFloat: Double;
     function GetInteger: Int64;
+    function GetBInteger: string;
     function GetObject: ISuperObject;
     function GetString: String;
     procedure SetBoolean(const Value: Boolean);
     procedure SetFloat(const Value: Double);
     procedure SetInteger(const Value: Int64);
+    procedure SetBInteger(const Value: string);
     procedure SetString(const Value: String);
     function GetName: String;
     function GetVariant: Variant;
@@ -322,6 +333,7 @@ type
     property AsArray: ISuperArray read GetArray;
     property AsString: String read GetString write SetString;
     property AsInteger: Int64 read GetInteger write SetInteger;
+    property AsBInteger: string read GetBInteger write SetBInteger;
     property AsFloat: Double read GetFloat write SetFloat;
     property AsBoolean: Boolean read GetBoolean write SetBoolean;
     property AsVariant: Variant read GetVariant write SetVariant;
@@ -886,6 +898,8 @@ begin
     Result := TJSONString.Create(String(Value)) as TT
   else if TJSONInteger.InheritsFrom(TT) then
     Result := TJSONInteger.Create(Int64(Value)) as TT
+  else if TJSONBInteger.InheritsFrom(TT) then
+    Result := TJSONBInteger.Create(string(Value)) as TT
   else if TJSONFloat.InheritsFrom(TT) then
     Result := TJSONFloat.Create(Double(Value)) as TT
   else if TJSONBoolean.InheritsFrom(TT) then
@@ -944,7 +958,9 @@ begin
   begin
     LJsonAncestor := GetValue<TJSONAncestor>(V);
 
-    if (Assigned(LJsonAncestor)) and (LJsonAncestor.ClassType = TJSONInteger) then
+    if (Assigned(LJsonAncestor)) and (
+      (LJsonAncestor.ClassType = TJSONInteger) or (LJsonAncestor.ClassType = TJSONBInteger)
+    ) then
     begin
       LVar := LJsonAncestor.AsVariant;
       Result := LVar <> 0;
@@ -995,12 +1011,12 @@ end;
 
 function TBaseJSON<T, Typ>.GetDateTime(V: Typ): TDateTime;
 var
-  Temp: IJSONAncestor;
+  Temp: IJSONAncestor;   
 begin
   Result := 0;
   if Member(V) then
     if GetNull(V) = jAssigned then
-    begin
+	begin
       Temp := GetData(V);
       if (Temp is TJSONDate) then
         Result := GetDate(V)
@@ -1008,7 +1024,7 @@ begin
         Result := GetTime(V)
       else
         Result := GetValue<TJSONDateTime>(V).Value
-    end;
+    end;	
 end;
 
 function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
@@ -1026,6 +1042,13 @@ begin
   Result := 0;
   if Member(V) then
     Result := GetValue<TJSONInteger>(V).ValueEx<Int64>;
+end;
+
+function TBaseJSON<T, Typ>.GetBInteger(V: Typ): string;
+begin
+  Result := EmptyStr;
+  if Member(V) then
+    Result := GetValue<TJSONBInteger>(V).ValueEx<string>;
 end;
 
 function TBaseJSON<T, Typ>.GetNull(V: Typ): TMemberStatus;
@@ -1104,6 +1127,8 @@ begin
      Result := varDouble
   else if Temp is TJSONInteger then
       Result := varInt64
+  else if Temp is TJSONBInteger then
+      Result := varUInt64
   else if Temp is TJSONNull then
      Result := varNull
   else if Temp is TJSONObject then
@@ -1144,6 +1169,11 @@ end;
 procedure TBaseJSON<T, Typ>.SetInteger(V: Typ; const Value: Int64);
 begin
   Member<TJSONInteger, Int64>(V, Value);
+end;
+
+procedure TBaseJSON<T, Typ>.SetBInteger(V: Typ; const Value: string);
+begin
+  Member<TJSONBInteger, string>(V, Value);
 end;
 
 procedure TBaseJSON<T, Typ>.SetNull(V: Typ; const Value: TMemberStatus);
@@ -1203,7 +1233,7 @@ begin
      if VTyp = varUnknown then
         VTyp := VarType(Value);
      case VTyp of
-       varString, varUString:
+       varString, varUString, varUInt64:
           S[V] := Value;
        varInt64, varInteger, varByte:
           I[V] := Value;
@@ -1430,7 +1460,7 @@ begin
     varBoolean:
         FJSONObj.AddPair(V, TJSONBoolean.Create(Data));
 
-    varString, varUString:
+    varString, varUString, varUInt64:
         FJSONObj.AddPair(V, TJSONString.Create(String(Data)));
 
     varDouble:
@@ -2932,6 +2962,8 @@ begin
      Result := dtString
   else if FJSON is TJSONInteger then
      Result := dtInteger
+  else if FJSON is TJSONBInteger then
+     Result := dtBInteger
   else if FJSON is TJSONFloat then
      Result := dtFloat
   else if FJSON is TJSONBoolean then
@@ -2988,6 +3020,11 @@ begin
      Result := TJSONInteger(FJSON).Value;
 end;
 
+function TCast.GetBInteger: string;
+begin
+  Result := GetString;
+end;
+
 function TCast.GetName: String;
 begin
   Result := FName;
@@ -3025,7 +3062,7 @@ begin
    case DataType of
      dtNil, dtNull, dtObject, dtArray:
         Result := Null;
-     dtString:
+     dtString, dtBInteger:
         Result := AsString;
      dtInteger:
         Result := AsInteger;
@@ -3073,6 +3110,12 @@ begin
   TJSONInteger(FJSON).Value := Value;
 end;
 
+procedure TCast.SetBInteger(const Value: string);
+begin
+  if not Assigned(FJSON) then Exit;
+  TJSONBInteger(FJSON).Value := Value;
+end;
+
 procedure TCast.SetString(const Value: String);
 begin
   if not Assigned(FJSON) then Exit;
@@ -3089,7 +3132,7 @@ end;
 procedure TCast.SetVariant(const Value: Variant);
 begin
   case DataType of
-     dtString:
+     dtString, dtBInteger:
         AsString := VarToStr(Value);
      dtInteger:
         AsInteger := Value;
