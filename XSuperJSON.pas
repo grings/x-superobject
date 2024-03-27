@@ -340,6 +340,7 @@ type
   IJSONArray = interface(IJSONValue<IJSONAncestor>)
   ['{C63B4323-6D7E-4151-BA1B-4C55CDE28FDB}']
     procedure Add(Val: IJSONAncestor);
+    procedure Move(CurIndex, NewIndex: Integer);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
     procedure Clear;
@@ -363,6 +364,7 @@ type
     destructor Destroy; override;
     procedure AsJSONString(Str: TJSONWriter); override;
     procedure Add(Val: IJSONAncestor);
+    procedure Move(CurIndex, NewIndex: Integer);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
     procedure Clear;
@@ -1872,6 +1874,11 @@ end;
 function TJSONArray.GetIsNull: Boolean;
 begin
   Result := FNull;
+end;
+
+procedure TJSONArray.Move(CurIndex, NewIndex: Integer);
+begin
+  FList.Move(CurIndex, NewIndex);
 end;
 
 procedure TJSONArray.Remove(Val: IJSONAncestor);

@@ -463,6 +463,7 @@ type
     procedure Add(Value: ISuperObject); overload;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
+    procedure Move(CurIndex, NewIndex: Integer);
     procedure Delete(Index: Integer); overload;
     procedure Clear;
     function Clone: ISuperArray;
@@ -484,6 +485,7 @@ type
     procedure Add(Value: ISuperArray); overload;
     procedure Add(Value: Variant; DateFormat: TFormatSettings); overload;
     procedure Add(Value: Variant); overload;
+    procedure Move(CurIndex, NewIndex: Integer);
     procedure Delete(Index: Integer); overload;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperArray; overload;
     function LocateIndex(Key: string; AValue: Variant): Integer;
@@ -1676,6 +1678,11 @@ begin
     end;
     Inc(i, 1);
   end;
+end;
+
+procedure TSuperArray.Move(CurIndex, NewIndex: Integer);
+begin
+  TJSONArray(FJSONObj).Move(CurIndex, NewIndex);
 end;
 
 procedure TSuperArray.SaveTo(Stream: TStream; const Ident, UniversalTime: Boolean);
