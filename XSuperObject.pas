@@ -1033,10 +1033,18 @@ function TBaseJSON<T, Typ>.GetDouble(V: Typ): Double;
 begin
   Result := 0;
   if Member(V) then
-     if GetType(V) = varInt64 then
-        Result := GetValue<TJSONInteger>(V).ValueEx<Int64>
-     else
-        Result := GetValue<TJSONFloat>(V).ValueEx<Double>;
+  begin
+    var
+    LTyp := GetType(V);
+    case LTyp of
+      varInt64:
+        Result := GetValue<TJSONInteger>(V).ValueEx<Int64>;
+      varDate:
+        Result := GetDateTime(V);
+    else
+      Result := GetValue<TJSONFloat>(V).ValueEx<Double>;
+    end;
+  end;
 end;
 
 function TBaseJSON<T, Typ>.GetInteger(V: Typ): Int64;
