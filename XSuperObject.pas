@@ -471,7 +471,10 @@ type
     function T: TSuperArray;
     function Where(const Cond: TCondCallBack<IMember>): ISuperArray;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperArray; overload;
-    function LocateIndex(Key: string; AValue: Variant): Integer;
+    // only for array of values
+    function LocateIndex(AValue: Variant): Integer; overload;
+    // only for array Objects
+    function LocateIndex(Key: string; AValue: Variant): Integer; overload;
   end;
 
   TSuperArray = class(TBaseJSON<IJSONArray, Integer>, ISuperArray)
@@ -488,7 +491,8 @@ type
     procedure Move(CurIndex, NewIndex: Integer);
     procedure Delete(Index: Integer); overload;
     function Delete(const Cond: TCondCallBack<IMember>): ISuperArray; overload;
-    function LocateIndex(Key: string; AValue: Variant): Integer;
+    function LocateIndex(AValue: Variant): Integer; overload;
+    function LocateIndex(Key: string; AValue: Variant): Integer; overload;
     procedure Clear;
     property Length: Integer read GetLength;
     function GetEnumerator: TSuperEnumerator<IJSONAncestor>;
@@ -1659,6 +1663,25 @@ end;
 function TSuperArray.GetLength: Integer;
 begin
   Result := TJSONArray(FJSONObj).Count;
+end;
+
+function TSuperArray.LocateIndex(AValue: Variant): Integer;
+var
+  i: Integer;
+begin
+  Result := -1;
+
+  i := 0;
+
+  for var LCast in Self do
+  begin
+    if LCast.AsVariant = AValue then
+    begin
+      Result := i;
+      Break;
+    end;
+    Inc(i, 1);
+  end
 end;
 
 function TSuperArray.LocateIndex(Key: string; AValue: Variant): Integer;
