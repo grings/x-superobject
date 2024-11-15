@@ -57,9 +57,32 @@ type
     Line: Integer;
   end;
 
-  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
+  TDataType = (dtNil, dtNull, dtObject, dtArray, dtString, dtInteger, dtBInteger, dtFloat, dtBoolean, dtDateTime, dtDate, dtTime);
   TJSONComparison<T> = reference to function(Left, Right: T): Integer;
   // ## Exception
+
+  TSuperJsonConfig = class
+  private
+    class var
+    FDoBreakpoint: Boolean;
+    { private declarations }
+  protected
+    { protected declarations }
+  public
+    type
+    TKeyNameCharCase = (knccNone, knccLower, knccUpper);
+    { public declarations }
+  public
+    class constructor OnCreate;
+    class var KeyNameCharCase: TKeyNameCharCase;
+
+    class property DoBreakpoint: Boolean read FDoBreakpoint write FDoBreakpoint;
+										    // the Format that you expect to format the data
+    class var FormatDateTimeStr: string;
+    class var FormatDateStr: string;
+    class var FormatTimeStr: string;
+    { public declarations }
+  end;
 
   TJSONSyntaxError = class(Exception)
   public
@@ -176,6 +199,13 @@ type
 
   IJSONInteger = interface(IJSONValue<Int64>)['{E9D84348-9634-40F5-8A1F-FF006F45FC6D}']end;
   TJSONInteger = class(TJSONValue<Int64>, IJSONInteger)
+  public
+    procedure AsJSONString(Str: TJSONWriter); override;
+    property Value;
+  end;
+
+  IJSONBInteger = interface(IJSONValue<string>)['{6D94F627-7700-4811-9C9F-CE9616136E2D}']end;
+  TJSONBInteger = class(TJSONValue<string>, IJSONBInteger)
   public
     procedure AsJSONString(Str: TJSONWriter); override;
     property Value;
@@ -310,6 +340,7 @@ type
   IJSONArray = interface(IJSONValue<IJSONAncestor>)
   ['{C63B4323-6D7E-4151-BA1B-4C55CDE28FDB}']
     procedure Add(Val: IJSONAncestor);
+    procedure Move(CurIndex, NewIndex: Integer);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
     procedure Clear;
@@ -333,6 +364,7 @@ type
     destructor Destroy; override;
     procedure AsJSONString(Str: TJSONWriter); override;
     procedure Add(Val: IJSONAncestor);
+    procedure Move(CurIndex, NewIndex: Integer);
     procedure Remove(Val: IJSONAncestor); overload;
     procedure Remove(Index: Integer); overload;
     procedure Clear;
@@ -354,6 +386,7 @@ type
     function  ReadValue: IJSONAncestor;
     procedure ReadString(var Val: IJSONAncestor);
     procedure ReadInteger(var Val: IJSONAncestor);
+    procedure ReadBInteger(var Val: IJSONAncestor);
     procedure ReadFloat(var Val: IJSONAncestor);
     procedure ReadObject(var Val: IJSONAncestor);
     procedure ReadTrue(var Val: IJSONAncestor);
@@ -385,7 +418,7 @@ type
   // --------
 
   TLexemType = ( ltNil,
-                 ltSValue, ltIValue, ltDValue, ltNull, ltCLeft, ltCRight,
+                 ltSValue, ltIValue, ltBIValue, ltDValue, ltNull, ltCLeft, ltCRight,
                  ltBLeft, ltBRight, ltBSlash, ltColon, ltDot, ltVirgule,
                  ltName,
                  ltTrue,
@@ -402,6 +435,7 @@ type
     destructor Destroy; override;
     function AsString: String; inline;
     function AsInt64: Int64;
+    function AsBInt: string;
     function AsDouble: Double;
     function AsType: TLexemType;
     function AsHInt: Int64;
@@ -414,12 +448,13 @@ type
   TLexeme = record
     Pos: TPosition;
     Int: Int64;
+    BInt: string;
     Str: String;
     Dbl: Double;
     LType: TLexemType;
   end;
 
-  TParseProc = (ppNil, ppInteger, ppDouble, ppString, ppName, ppEscape, ppEscapeUChar);
+  TParseProc = (ppNil, ppInteger, ppBInteger, ppDouble, ppString, ppName, ppEscape, ppEscapeUChar);
 
   TTriggerProcs = set of (ttBuffer, ttEnd, ttBack);
 
@@ -495,6 +530,7 @@ type
      rString,
      rString2,
      rInt,
+     rBInt,
      rDouble,
      rExp, rExpE,
      rExpPM,
@@ -581,7 +617,7 @@ uses
 const
   FloatFormat : TFormatSettings = ( DecimalSeparator : '.' );
   STokenTypes : array [TLexemType] of string = ('Nil',
-                'String', 'Integer', 'Float', 'Null', '[', ']',
+                'String', 'Integer', 'BInteger', 'Float', 'Null', '[', ']',
                 '(', ')', '\', ':', '.', ',',
                 '',
                 'TRUE',
@@ -773,7 +809,14 @@ end;
 
 function TLexBuff.AsInt64: Int64;
 begin
-  Result := StrToInt64(AsString);
+  var
+  LStr := AsString;
+  Result := StrToInt64(LStr);
+end;
+
+function TLexBuff.AsBInt: string;
+begin
+  SetString(Result, Buff, Length);
 end;
 
 function TLexBuff.AsString: String;
@@ -851,8 +894,6 @@ end;
 
 { TTrigger }
 
-{ TTrigger }
-
 constructor TTrigger.Create(NextRoute: TRoute; TriggerProcs: TTriggerProcs;
   ParseProcs: TParseProc);
 begin
@@ -890,7 +931,6 @@ begin
   FName := Name;
   FTriggerList := TObjectList<TTrigger>.Create;
 end;
-
 
 destructor TRoute.Destroy;
 begin
@@ -972,12 +1012,12 @@ end;
 constructor TJSONGrammar.Create;
 begin
   inherited;
-
   rFirst := CreateRoute('First');
   rName := CreateRoute('Name');
   rString := CreateRoute('String');
   rString2 := CreateRoute('String2');
   rInt := CreateRoute('Int');
+  rBInt := CreateRoute('BInt');
   rDouble := CreateRoute('Double');
 
   rExp := CreateRoute('Exp');
@@ -1024,6 +1064,12 @@ begin
   rInt.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppInteger));
   rInt.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
 
+  rBInt.Add(optNumeric, TUseRouteTrigger.Create(rBInt, [], ppNil));
+  rBInt.Add(['.'], TUseRouteTrigger.Create(rDouble, [], ppNil));
+  rBInt.Add(['e', 'E'], TUseRouteTrigger.Create(rExp, [], ppNil));
+  rBInt.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppInteger));
+  rBInt.NoRoute(TErrorTrigger.Create(ERR_UnexpectedTokenILLEGAL));
+
   rDouble.Add(optNumeric, TUseRouteTrigger.Create(rDouble, [], ppNil));
   rDouble.Add(['e', 'E'], TUseRouteTrigger.Create(rExp, [], ppNil));
   rDouble.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppDouble));
@@ -1039,7 +1085,6 @@ begin
   rExpE.Add(optNumeric, TUseRouteTrigger.Create(rExpE, [], ppNil));
   rExpE.Add(optStop, TJumpTrigger.Create(rFirst, [ttEnd, ttBack], ppDouble));
   rExpE.NoRoute(TErrorTrigger.Create(Err_UnexpectedTokenILLEGAL));
-
 end;
 
 destructor TJSONGrammar.Destroy;
@@ -1049,6 +1094,7 @@ begin
   rString.Free;
   rString2.Free;
   rInt.Free;
+  rBInt.Free;
   rDouble.Free;
   rExp.Free;
   rExpE.Free;
@@ -1300,8 +1346,20 @@ begin
      begin
         case Trigger.ParseProcs of
             ppInteger: begin
-               FLexem.Int := FBuffer.AsInt64;
-               FLexem.LType := ltIValue;
+               if FBuffer.AsString.Length >= 20 then
+               begin
+                 FLexem.BInt := FBuffer.AsString;
+                 FLexem.LType := ltBIValue;
+               end
+               else
+               begin
+                 FLexem.Int := FBuffer.AsInt64;
+                 FLexem.LType := ltIValue;
+               end;
+            end;
+            ppBInteger: begin
+               FLexem.BInt := FBuffer.AsBInt;
+               FLexem.LType := ltBIValue;
             end;
             ppDouble:begin
                FLexem.Dbl := FBuffer.AsDouble;
@@ -1416,6 +1474,12 @@ begin
   LGen.KillLex;
 end;
 
+procedure TJSONBuilder.ReadBInteger(var Val: IJSONAncestor);
+begin
+  Val := TJSONBInteger.Create(LGen.Current.BInt);
+  LGen.KillLex;
+end;
+
 procedure TJSONBuilder.ReadNull(var Val: IJSONAncestor);
 begin
   Val := TJSONNull.Create(True);
@@ -1431,10 +1495,10 @@ begin
   repeat
     if LGen.CheckName(Name) then
     begin
-       LGen.KillLex;
-       if not LGen.CheckKill(ltColon) then
-          raise TJSONSyntaxError.CreateFmt(Err_Expected, [':'], LGen.CurrPos);
-       TJSONObject(Val).AddPair(TJSONPair.Create(Name, ReadValue));
+      LGen.KillLex;
+      if not LGen.CheckKill(ltColon) then
+        raise TJSONSyntaxError.CreateFmt(Err_Expected, [':'], LGen.CurrPos);
+      TJSONObject(Val).AddPair(TJSONPair.Create(Name, ReadValue));
     end
   until not LGen.CheckKill(ltVirgule);
 
@@ -1454,9 +1518,9 @@ begin
   else
      if TJSONDateManager.Check(LGen.Current.Str, dT, DVal ) then
         case DVal of
-           dtDateTime: Val := TJSONDateTime.Create(dT);
-           dtDate    : Val := TJSONDate.Create(TDate(dT));
-           dtTime    : Val := TJSONTime.Create(TTime(dT));
+           dtDateTime: Val := TJSONDateTime.Create(dT, TSuperJsonConfig.FormatDateTimeStr);
+           dtDate    : Val := TJSONDate.Create(TDate(dT), TSuperJsonConfig.FormatDateStr);
+           dtTime    : Val := TJSONTime.Create(TTime(dT), TSuperJsonConfig.FormatTimeStr);
            else
              goto JMP;
         end
@@ -1473,10 +1537,11 @@ end;
 
 function TJSONBuilder.ReadValue: IJSONAncestor;
 begin
-  case LGen.Check([ ltSValue, ltIValue, ltDValue, ltBLeft, ltCLeft,
+  case LGen.Check([ ltSValue, ltIValue, ltBIValue, ltDValue, ltBLeft, ltCLeft,
                     ltTrue, ltFalse, ltNull ]) of
     ltSValue: ReadString(Result);
     ltIValue: ReadInteger(Result);
+    ltBIValue: ReadBInteger(Result);
     ltDValue: ReadFloat(Result);
     ltBLeft : ReadObject(Result);
     ltTrue  : ReadTrue(Result);
@@ -1506,6 +1571,21 @@ begin
      Str.AppendVal( cNull )
   else
      Str.AppendVal( Value );
+end;
+
+
+{ TJSONBInteger }
+
+procedure TJSONBInteger.AsJSONString(Str: TJSONWriter);
+begin
+  if FNull then
+     Str.AppendVal( cNull )
+  else
+  begin
+    var
+    LValue := Value;
+     Str.AppendVal( LValue );
+  end;
 end;
 
 
@@ -1672,8 +1752,8 @@ end;
 
 constructor TJSONPair.Create(const aName: String; aValue: IJSONAncestor);
 begin
-  FName := aName;
-  FValue := aValue;
+  Name := aName;
+  SetValue(aValue);
 end;
 
 destructor TJSONPair.Destroy;
@@ -1695,7 +1775,14 @@ end;
 
 procedure TJSONPair.SetName(const Value: String);
 begin
-  FName := Value;
+  case TSuperJSONConfig.KeyNameCharCase of
+    TSuperJsonConfig.TKeyNameCharCase.knccLower:
+      FName := Value.ToLower;
+    TSuperJsonConfig.TKeyNameCharCase.knccUpper:
+      FName := Value.ToUpper;
+  else
+    FName := Value;
+  end;
 end;
 
 procedure TJSONPair.SetValue(const Value: IJSONAncestor);
@@ -1787,6 +1874,11 @@ end;
 function TJSONArray.GetIsNull: Boolean;
 begin
   Result := FNull;
+end;
+
+procedure TJSONArray.Move(CurIndex, NewIndex: Integer);
+begin
+  FList.Move(CurIndex, NewIndex);
 end;
 
 procedure TJSONArray.Remove(Val: IJSONAncestor);
@@ -2340,6 +2432,17 @@ end;
 procedure TJSONRaw.AsJSONString(Str: TJSONWriter);
 begin
   Str.AppendVal( Value );
+end;
+
+{ TSuperJsonConfig }
+
+class constructor TSuperJsonConfig.OnCreate;
+begin
+  KeyNameCharCase := knccNone;
+  DoBreakpoint := False;
+  FormatDateTimeStr := EmptyStr;
+  FormatDateStr := EmptyStr;
+  FormatTimeStr := EmptyStr;
 end;
 
 initialization
